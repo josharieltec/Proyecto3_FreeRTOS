@@ -1,3 +1,4 @@
+#include <Arduino.h>
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include <DHT.h>
@@ -21,6 +22,7 @@ float SmokeCurve[3] = {2.3, 0.53, -0.44};
 float Ro = 10;  // Calibration value for the MQ2
 
 // WiFi settings
+String URL = "http://192.168.68.120/sensor_project/test.php";
 
 // Data variables
 float temperature = 0;
@@ -47,66 +49,6 @@ float MQRead(int mq_pin);
 int MQGetGasPercentage(float rs_ro_ratio, int gas_id);
 int MQGetPercentage(float rs_ro_ratio, float *pcurve);
 void LoadData();
-
-// FreeRTOS tasks
-void TaskReadTemperatureCode(void * pvParameters) {
-  for (;;) {
-    temperature = temp();
-    if (isnan(temperature)) temperature = 0;  // Handle invalid readings
-    vTaskDelay(30000 / portTICK_PERIOD_MS);  // Read every 30 seconds
-  }
-}
-
-void TaskReadHumidityCode(void * pvParameters) {
-  for (;;) {
-    humidity = hum();
-    if (isnan(humidity)) humidity = 0;  // Handle invalid readings
-    vTaskDelay(30000 / portTICK_PERIOD_MS);  // Read every 30 seconds
-  }
-}
-
-void TaskReadGasCode(void * pvParameters) {
-  for (;;) {
-    LoadData();  // Load CO and smoke data
-    vTaskDelay(30000 / portTICK_PERIOD_MS);  // Read every 30 seconds
-  }
-}
-
-void TaskSendDataCode(void * pvParameters) {
-  for (;;) {
-    if (WiFi.status() == WL_CONNECTED) {
-      String postData = "temperature=" + String(temperature) + "&humidity=" + String(humidity) +
-                        "&co=" + String(co) + "&smoke=" + String(smoke);
-      HTTPClient http;
-      http.begin(URL);
-      http.addHeader("Content-Type", "application/x-www-form-urlencoded");
-
-      int httpCode = http.POST(postData);
-      if (httpCode > 0) {
-        if (httpCode == HTTP_CODE_OK) {
-          String payload = http.getString();
-        }
-      }
-      
-      http.end();
-    }
-    vTaskDelay(60000 / portTICK_PERIOD_MS);  // Send data every minute
-  }
-}
-
-void TaskConnectWiFiCode(void * pvParameters) {
-  for (;;) {
-    if (WiFi.status() != WL_CONNECTED) {
-      WiFi.mode(WIFI_STA);
-      WiFi.begin(ssid, password);
-
-      while (WiFi.status() != WL_CONNECTED) {
-        vTaskDelay(500 / portTICK_PERIOD_MS);  // Wait until connected
-      }
-    }
-    vTaskDelay(10000 / portTICK_PERIOD_MS);  // Check connection every 10 seconds
-  }
-}
 
 // Sensor reading functions
 float temp() {
@@ -168,6 +110,68 @@ int MQGetPercentage(float rs_ro_ratio, float *pcurve) {
   return (pow(10, ((log(rs_ro_ratio) - pcurve[1]) / pcurve[2]) + pcurve[0]));
 }
 
+// FreeRTOS tasks
+void TaskReadTemperatureCode(void * pvParameters) {
+  for (;;) {
+    temperature = temp();
+    if (isnan(temperature)) temperature = 0;  // Handle invalid readings
+    vTaskDelay(30000 / portTICK_PERIOD_MS);  // Read every 30 seconds
+  }
+}
+
+void TaskReadHumidityCode(void * pvParameters) {
+  for (;;) {
+    humidity = hum();
+    if (isnan(humidity)) humidity = 0;  // Handle invalid readings
+    vTaskDelay(30000 / portTICK_PERIOD_MS);  // Read every 30 seconds
+  }
+}
+
+void TaskReadGasCode(void * pvParameters) {
+  for (;;) {
+    LoadData();  // Load CO and smoke data
+    vTaskDelay(30000 / portTICK_PERIOD_MS);  // Read every 30 seconds
+  }
+}
+
+void TaskSendDataCode(void * pvParameters) {
+  for (;;) {
+    if (WiFi.status() == WL_CONNECTED) {
+      String postData = "temperature=" + String(temperature) + "&humidity=" + String(humidity) +
+                        "&co=" + String(co) + "&smoke=" + String(smoke);
+      HTTPClient http;
+      http.begin(URL);
+      http.addHeader("Content-Type", "application/x-www-form-urlencoded");
+
+      int httpCode = http.POST(postData);
+      if (httpCode > 0) {
+        if (httpCode == HTTP_CODE_OK) {
+          String payload = http.getString();
+        }
+      }
+      
+      http.end();
+    }
+    vTaskDelay(60000 / portTICK_PERIOD_MS);  // Send data every minute
+  }
+}
+
+void TaskConnectWiFiCode(void * pvParameters) {
+  for (;;) {
+    if (WiFi.status() != WL_CONNECTED) {
+      WiFi.mode(WIFI_STA);
+      WiFi.begin(ssid, password);
+
+      while (WiFi.status() != WL_CONNECTED) {
+        vTaskDelay(500 / portTICK_PERIOD_MS);  // Wait until connected
+      }
+    }
+    vTaskDelay(10000 / portTICK_PERIOD_MS);  // Check connection every 10 seconds
+  }
+}
+
+
+
 void setup() {
   Serial.begin(115200);
   Ro = MQCalibration(MQ_PIN);
@@ -186,4 +190,3 @@ void setup() {
 void loop() {
   // Empty, FreeRTOS handles the tasks
 }
-
