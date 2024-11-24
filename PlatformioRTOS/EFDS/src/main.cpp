@@ -23,6 +23,8 @@ float Ro = 10;  // Calibration value for the MQ2
 
 // WiFi settings
 String URL = "http://192.168.68.120/sensor_project/test.php";
+const char* ssid = "Name";
+const char* password = "password";
 
 // Data variables
 float temperature = 0;

@@ -21,6 +21,9 @@ float SmokeCurve[3] = {2.3, 0.53, -0.44};
 float Ro = 10;  // Calibration value for the MQ2
 
 // WiFi settings
+String URL = "http://192.168.68.120/sensor_project/test.php";
+const char* ssid = "NAME";
+const char* password = "PASSWORD";
 
 // Data variables
 float temperature = 0;
