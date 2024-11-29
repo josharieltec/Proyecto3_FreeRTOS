@@ -32,6 +32,16 @@ float humidity = 0;
 float co = 0;
 float smoke = 0;
 
+// Alert thresholds
+const float TEMP_THRESHOLD = 40.0;   // Max temperature in °C
+const float HUM_THRESHOLD = 30.0;    // Max humidity in %
+const float CO_THRESHOLD = 30.0;     // Max CO in ppm
+const float SMOKE_THRESHOLD = 1000.0;  // Max smoke in ppm
+
+// Alert and WiFi flags
+bool alert = false;
+bool wifi_active = false;
+
 // Sensor initialization
 OneWire ds(4);
 DallasTemperature sensors(&ds);
@@ -41,8 +51,8 @@ DHT_Unified dht(DHTPIN, DHTTYPE);
 TaskHandle_t TaskReadTemperature;
 TaskHandle_t TaskReadHumidity;
 TaskHandle_t TaskReadGas;
+TaskHandle_t TaskActivateWiFi;
 TaskHandle_t TaskSendData;
-TaskHandle_t TaskConnectWiFi;
 
 // Sensor functions
 float MQCalibration(int mq_pin);
@@ -117,6 +127,11 @@ void TaskReadTemperatureCode(void * pvParameters) {
   for (;;) {
     temperature = temp();
     if (isnan(temperature)) temperature = 0;  // Handle invalid readings
+
+    // Check alert condition
+    if (temperature > TEMP_THRESHOLD) {
+      alert = true;
+    }
     vTaskDelay(30000 / portTICK_PERIOD_MS);  // Read every 30 seconds
   }
 }
@@ -125,6 +140,11 @@ void TaskReadHumidityCode(void * pvParameters) {
   for (;;) {
     humidity = hum();
     if (isnan(humidity)) humidity = 0;  // Handle invalid readings
+
+    // Check alert condition
+    if (humidity < HUM_THRESHOLD) {
+      alert = true;
+    }
     vTaskDelay(30000 / portTICK_PERIOD_MS);  // Read every 30 seconds
   }
 }
@@ -132,13 +152,33 @@ void TaskReadHumidityCode(void * pvParameters) {
 void TaskReadGasCode(void * pvParameters) {
   for (;;) {
     LoadData();  // Load CO and smoke data
+
+    // Check alert condition
+    if (co > CO_THRESHOLD || smoke > SMOKE_THRESHOLD) {
+      alert = true;
+    }
     vTaskDelay(30000 / portTICK_PERIOD_MS);  // Read every 30 seconds
+  }
+}
+
+void TaskActivateWiFiCode(void * pvParameters) {
+  for (;;) {
+    if (alert && !wifi_active) {  // Activate WiFi only when alert is true
+      WiFi.begin(ssid, password);
+      while (WiFi.status() != WL_CONNECTED) {
+        delay(500);
+        Serial.print(".");
+      }
+      Serial.println("WiFi connected");
+      wifi_active = true;
+    }
+    vTaskDelay(5000 / portTICK_PERIOD_MS);  // Check every 5 seconds
   }
 }
 
 void TaskSendDataCode(void * pvParameters) {
   for (;;) {
-    if (WiFi.status() == WL_CONNECTED) {
+    if (alert && wifi_active) {  // Only send data if WiFi is active
       String postData = "temperature=" + String(temperature) + "&humidity=" + String(humidity) +
                         "&co=" + String(co) + "&smoke=" + String(smoke);
       HTTPClient http;
@@ -149,30 +189,18 @@ void TaskSendDataCode(void * pvParameters) {
       if (httpCode > 0) {
         if (httpCode == HTTP_CODE_OK) {
           String payload = http.getString();
+          Serial.println("Data sent: " + payload);
         }
       }
       
       http.end();
+      alert = false;   // Reset alert flag
+      wifi_active = false;  // Deactivate WiFi
+      WiFi.disconnect();
     }
-    vTaskDelay(60000 / portTICK_PERIOD_MS);  // Send data every minute
+    vTaskDelay(10000 / portTICK_PERIOD_MS);  // Check every 10 seconds
   }
 }
-
-void TaskConnectWiFiCode(void * pvParameters) {
-  for (;;) {
-    if (WiFi.status() != WL_CONNECTED) {
-      WiFi.mode(WIFI_STA);
-      WiFi.begin(ssid, password);
-
-      while (WiFi.status() != WL_CONNECTED) {
-        vTaskDelay(500 / portTICK_PERIOD_MS);  // Wait until connected
-      }
-    }
-    vTaskDelay(10000 / portTICK_PERIOD_MS);  // Check connection every 10 seconds
-  }
-}
-
-
 
 void setup() {
   Serial.begin(115200);
@@ -185,8 +213,8 @@ void setup() {
   xTaskCreatePinnedToCore(TaskReadTemperatureCode, "Read Temperature", 2048, NULL, 1, &TaskReadTemperature, 1);
   xTaskCreatePinnedToCore(TaskReadHumidityCode, "Read Humidity", 2048, NULL, 1, &TaskReadHumidity, 1);
   xTaskCreatePinnedToCore(TaskReadGasCode, "Read Gas", 2048, NULL, 1, &TaskReadGas, 1);
+  xTaskCreatePinnedToCore(TaskActivateWiFiCode, "Activate WiFi", 2048, NULL, 1, &TaskActivateWiFi, 1);
   xTaskCreatePinnedToCore(TaskSendDataCode, "Send Data", 4096, NULL, 1, &TaskSendData, 1);
-  xTaskCreatePinnedToCore(TaskConnectWiFiCode, "Connect WiFi", 2048, NULL, 1, &TaskConnectWiFi, 1);
 }
 
 void loop() {
