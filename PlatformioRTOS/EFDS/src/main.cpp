@@ -213,8 +213,9 @@ void setup() {
   xTaskCreatePinnedToCore(TaskReadTemperatureCode, "Read Temperature", 2048, NULL, 1, &TaskReadTemperature, 1);
   xTaskCreatePinnedToCore(TaskReadHumidityCode, "Read Humidity", 2048, NULL, 1, &TaskReadHumidity, 1);
   xTaskCreatePinnedToCore(TaskReadGasCode, "Read Gas", 2048, NULL, 1, &TaskReadGas, 1);
-  xTaskCreatePinnedToCore(TaskActivateWiFiCode, "Activate WiFi", 2048, NULL, 1, &TaskActivateWiFi, 1);
-  xTaskCreatePinnedToCore(TaskSendDataCode, "Send Data", 4096, NULL, 1, &TaskSendData, 1);
+  
+  xTaskCreatePinnedToCore(TaskActivateWiFiCode, "Activate WiFi", 2048, NULL, 2, &TaskActivateWiFi, 0);
+  xTaskCreatePinnedToCore(TaskSendDataCode, "Send Data", 4096, NULL, 2, &TaskSendData, 0);
 }
 
 void loop() {
